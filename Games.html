@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Game Results</title>
+    <style>
+      :root {
+        --bg: #f3f6fb;
+        --panel: #ffffff;
+        --panel-alt: #f8fafc;
+        --text: #14213d;
+        --muted: #55627a;
+        --line: #dfe7f1;
+        --primary-dark: #1e3a8a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(180deg, #edf3ff 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+      .panel {
+        max-width: 980px;
+        margin: 18px auto;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 12px 28px rgba(20, 33, 61, 0.08);
+        padding: 18px;
+      }
+      h1 { margin: 0 0 12px; font-size: 32px; color: var(--primary-dark); }
+      .nav { margin-bottom: 16px; font-size: 14px; }
+      .nav a { color: var(--primary-dark); font-weight: 700; }
+      .filters {
+        display: flex; flex-wrap: wrap; gap: 10px;
+        margin-bottom: 14px; padding: 12px;
+        background: var(--panel-alt); border: 1px solid var(--line); border-radius: 12px;
+      }
+      .field { display: flex; flex-direction: column; min-width: 140px; flex: 1 1 140px; }
+      .field label { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; }
+      .field select { padding: 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+      .summary { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+      .game { border: 1px solid var(--line); border-radius: 14px; margin-bottom: 14px; overflow: hidden; }
+      .game-head { background: var(--panel-alt); padding: 8px 14px; font-size: 13px; font-weight: 700; color: var(--muted); }
+      .score { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 14px; font-size: 20px; font-weight: 700; }
+      .score .num { font-size: 34px; color: var(--primary-dark); }
+      .score .win { color: #166534; }
+      .teams { display: flex; border-top: 1px solid var(--line); }
+      .team { flex: 1; padding: 10px 14px; font-size: 14px; }
+      .team + .team { border-left: 1px solid var(--line); }
+      .team h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; color: var(--muted); }
+      .team ul { margin: 0; padding: 0; list-style: none; }
+      .team li { padding: 6px 8px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+      .team li:nth-child(even) { background: var(--panel-alt); }
+      .team li:last-child { border-bottom: 0; }
+      .team li.scorer { background: #dcfce7; border-left: 4px solid #16a34a; font-weight: 700; }
+      .goals { color: var(--muted); }
+      .team li.scorer .goals { color: #166534; }
+      .empty { padding: 22px; text-align: center; color: var(--muted); font-weight: 600; }
+      @media (max-width: 700px) {
+        .panel { margin: 8px; padding: 12px; border-radius: 12px; }
+        h1 { font-size: 24px; }
+        .field { min-width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h1>Game Results</h1>
+      <div class="nav"><a id="leagueLink" href="?" target="_top">&larr; League table</a></div>
+
+      <div class="filters">
+        <div class="field">
+          <label for="yearFilter">Year</label>
+          <select id="yearFilter"><option value="">All years</option></select>
+        </div>
+        <div class="field">
+          <label for="seasonFilter">Season</label>
+          <select id="seasonFilter"><option value="">All seasons</option></select>
+        </div>
+        <div class="field">
+          <label for="weekFilter">Week</label>
+          <select id="weekFilter"><option value="">All weeks</option></select>
+        </div>
+      </div>
+
+      <div class="summary" id="summaryText">Loading games...</div>
+      <div id="games"></div>
+    </div>
+
+    <script>
+      const yearFilter = document.getElementById('yearFilter');
+      const seasonFilter = document.getElementById('seasonFilter');
+      const weekFilter = document.getElementById('weekFilter');
+      const summaryText = document.getElementById('summaryText');
+      const gamesEl = document.getElementById('games');
+
+      yearFilter.addEventListener('change', function () {
+        seasonFilter.value = '';
+        weekFilter.value = '';
+        loadGames();
+      });
+      seasonFilter.addEventListener('change', function () {
+        weekFilter.value = '';
+        loadGames();
+      });
+      weekFilter.addEventListener('change', loadGames);
+
+      function loadGames() {
+        google.script.run.withSuccessHandler(render).getGamesData({
+          year: yearFilter.value,
+          season: seasonFilter.value,
+          week: weekFilter.value
+        });
+      }
+
+      function fillSelect(select, values, selected, label) {
+        select.innerHTML = '<option value="">' + label + '</option>' +
+          values.map(function (v) {
+            return '<option value="' + esc(v) + '"' + (v === selected ? ' selected' : '') + '>' + esc(v) + '</option>';
+          }).join('');
+      }
+
+      function teamHtml(title, players) {
+        const items = players.map(function (p) {
+          return '<li' + (p.goals > 0 ? ' class="scorer"' : '') + '><span>' + esc(p.player) + '</span><span class="goals">' + (p.goals ? p.goals + ' &#9917;' : '') + '</span></li>';
+        }).join('');
+        return '<div class="team"><h3>' + title + '</h3><ul>' + (items || '<li class="goals">No players recorded</li>') + '</ul></div>';
+      }
+
+      function render(response) {
+        fillSelect(yearFilter, response.filters.years, response.selected.year, 'All years');
+        fillSelect(seasonFilter, response.filters.seasons, response.selected.season, 'All seasons');
+        fillSelect(weekFilter, response.filters.weeks, response.selected.week, 'All weeks');
+
+        if (!response.games.length) {
+          gamesEl.innerHTML = '<div class="empty">No games found for the selected filters.</div>';
+          summaryText.textContent = 'No matches found.';
+          return;
+        }
+
+        summaryText.textContent = response.games.length + ' game' + (response.games.length === 1 ? '' : 's') + ' shown.';
+        gamesEl.innerHTML = response.games.map(function (g) {
+          const bibsWin = g.bibsScore > g.nonBibsScore;
+          const nonWin = g.nonBibsScore > g.bibsScore;
+          return '<div class="game">' +
+            '<div class="game-head">' + esc(g.year) + ' &middot; ' + esc(g.season) + ' &middot; ' + esc(g.week) + '</div>' +
+            '<div class="score"><span>Bibs</span>' +
+            '<span class="num' + (bibsWin ? ' win' : '') + '">' + g.bibsScore + '</span><span>-</span>' +
+            '<span class="num' + (nonWin ? ' win' : '') + '">' + g.nonBibsScore + '</span><span>Non-Bibs</span></div>' +
+            '<div class="teams">' + teamHtml('Bibs', g.bibs) + teamHtml('Non-Bibs', g.nonBibs) + '</div>' +
+            '</div>';
+        }).join('');
+      }
+
+      function esc(value) {
+        return String(value)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+      }
+
+      google.script.run.withSuccessHandler(function (url) {
+        document.getElementById('leagueLink').href = url;
+      }).getAppUrl();
+
+      loadGames();
+    </script>
+  </body>
+</html>

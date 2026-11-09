@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>League Table</title>
+    <style>
+      :root {
+        --bg: #f3f6fb;
+        --panel: #ffffff;
+        --panel-alt: #f8fafc;
+        --text: #14213d;
+        --muted: #55627a;
+        --line: #dfe7f1;
+        --primary: #1d4ed8;
+        --primary-dark: #1e3a8a;
+        --accent: #dbeafe;
+        --success: #166534;
+        --warning: #92400e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(180deg, #edf3ff 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+
+      .panel {
+        max-width: 980px;
+        margin: 18px auto;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 12px 28px rgba(20, 33, 61, 0.08);
+        padding: 18px;
+      }
+
+      h1 {
+        margin: 0 0 20px;
+        font-size: 32px;
+        letter-spacing: 0.02em;
+        color: var(--primary-dark);
+      }
+
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: flex-end;
+        margin-bottom: 14px;
+        padding: 12px;
+        background: var(--panel-alt);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        min-width: 140px;
+        flex: 1 1 140px;
+      }
+
+      .field label {
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 7px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      select, button {
+        padding: 10px 12px;
+        font-size: 14px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+      }
+
+      select {
+        background: white;
+        color: var(--text);
+      }
+
+      button {
+        background: linear-gradient(180deg, var(--primary) 0%, #1e40af 100%);
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-weight: 700;
+        min-width: 120px;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 16px rgba(29, 78, 216, 0.2);
+      }
+
+      .summary {
+        margin: 10px 0 16px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      th, td {
+        padding: 9px 8px;
+        text-align: left;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+      }
+
+      th {
+        background: linear-gradient(180deg, #eff6ff 0%, #e0ebff 100%);
+        color: var(--primary-dark);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      tbody tr:nth-child(even) {
+        background: #fafcff;
+      }
+
+      tbody tr:hover {
+        background: #f1f7ff;
+      }
+
+      tbody td:nth-child(1) {
+        font-weight: 700;
+        color: var(--primary-dark);
+      }
+
+      @media (max-width: 700px) {
+        body {
+          margin: 0;
+        }
+
+        .panel {
+          margin: 8px;
+          padding: 12px;
+          border-radius: 12px;
+        }
+
+        h1 {
+          font-size: 24px;
+          margin-bottom: 12px;
+        }
+
+        .field {
+          min-width: 100%;
+        }
+
+        th, td {
+          padding: 8px 6px;
+          font-size: 12px;
+        }
+
+        .summary {
+          font-size: 12px;
+        }
+      }
+
+      .empty {
+        padding: 22px;
+        text-align: center;
+        color: var(--muted);
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h1>League Table</h1>
+      <div style="margin-bottom:16px;font-size:14px"><a id="gamesLink" href="#" target="_top" style="color:var(--primary-dark);font-weight:700">Game results &rarr;</a></div>
+
+      <div class="filters">
+        <div class="field">
+          <label for="yearFilter">Year</label>
+          <select id="yearFilter">
+            <option value="">All years</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="seasonFilter">Season</label>
+          <select id="seasonFilter">
+            <option value="">All seasons</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="weekFilter">Week</label>
+          <select id="weekFilter">
+            <option value="">All weeks</option>
+          </select>
+        </div>
+
+      </div>
+
+      <div class="summary" id="summaryText">Loading table...</div>
+
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="position" class="sortable">Pos</th>
+            <th data-sort="player" class="sortable">Player</th>
+            <th data-sort="played" class="sortable">P</th>
+            <th data-sort="wins" class="sortable">W</th>
+            <th data-sort="draws" class="sortable">D</th>
+            <th data-sort="losses" class="sortable">L</th>
+            <th data-sort="points" class="sortable">Points</th>
+            <th data-sort="goals" class="sortable">Goals</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <script>
+      const yearFilter = document.getElementById('yearFilter');
+      const seasonFilter = document.getElementById('seasonFilter');
+      const weekFilter = document.getElementById('weekFilter');
+      const summaryText = document.getElementById('summaryText');
+      const tableBody = document.getElementById('tableBody');
+      let currentSort = { key: 'points', direction: 'desc' };
+
+      yearFilter.addEventListener('change', function () {
+        seasonFilter.value = '';
+        weekFilter.value = '';
+        loadTable();
+      });
+      seasonFilter.addEventListener('change', function () {
+        weekFilter.value = '';
+        loadTable();
+      });
+      weekFilter.addEventListener('change', loadTable);
+
+      function loadTable() {
+        const payload = {
+          year: yearFilter.value,
+          season: seasonFilter.value,
+          week: weekFilter.value
+        };
+
+        google.script.run.withSuccessHandler(renderTable).getLeagueTableData(payload);
+      }
+
+      function renderTable(response) {
+        populateFilters(response.filters, response.selected);
+
+        if (!response.rows || !response.rows.length) {
+          tableBody.innerHTML = '<tr><td colspan="8" class="empty">No results found for the selected filters.</td></tr>';
+          summaryText.textContent = 'No matches found.';
+          return;
+        }
+
+        const rows = sortRows(response.rows, currentSort.key, currentSort.direction);
+        summaryText.textContent = 'Showing ' + rows.length + ' players for the selected filters.';
+
+        tableBody.innerHTML = rows.map(function (row) {
+          return '<tr>' +
+            '<td>' + row.position + '</td>' +
+            '<td>' + escapeHtml(row.player) + '</td>' +
+            '<td>' + row.played + '</td>' +
+            '<td>' + row.wins + '</td>' +
+            '<td>' + row.draws + '</td>' +
+            '<td>' + row.losses + '</td>' +
+            '<td>' + row.points + '</td>' +
+            '<td>' + row.goals + '</td>' +
+            '</tr>';
+        }).join('');
+
+        document.querySelectorAll('.sortable').forEach(function (th) {
+          th.style.cursor = 'pointer';
+          th.title = 'Click to sort';
+          th.onclick = function () {
+            const key = th.getAttribute('data-sort');
+            if (currentSort.key === key) {
+              currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+              currentSort.key = key;
+              currentSort.direction = key === 'player' ? 'asc' : 'desc';
+            }
+            renderTable(response);
+          };
+        });
+      }
+
+      function sortRows(rows, key, direction) {
+        const dir = direction === 'asc' ? 1 : -1;
+
+        return rows.slice().sort(function (a, b) {
+          if (key === 'player') {
+            return a.player.localeCompare(b.player) * dir;
+          }
+
+          if (a[key] === b[key]) {
+            return a.player.localeCompare(b.player);
+          }
+
+          return (Number(a[key]) - Number(b[key])) * dir;
+        }).map(function (row, index) {
+          row.position = index + 1;
+          return row;
+        });
+      }
+
+      function populateFilters(filters, selected) {
+        const selectedYear = selected && selected.year ? selected.year : '';
+        const selectedSeason = selected && selected.season ? selected.season : '';
+        const selectedWeek = selected && selected.week ? selected.week : '';
+
+        if (filters && filters.years) {
+          fillSelect(yearFilter, filters.years, 'All years', selectedYear);
+        }
+
+        if (filters && filters.seasons) {
+          fillSelect(seasonFilter, filters.seasons, 'All seasons', selectedSeason);
+        }
+
+        if (filters && filters.weeks) {
+          fillSelect(weekFilter, filters.weeks, 'All weeks', selectedWeek);
+        }
+
+        yearFilter.value = selectedYear || '';
+        seasonFilter.value = selectedSeason || '';
+        weekFilter.value = selectedWeek || '';
+      }
+
+      function fillSelect(selectElement, values, defaultLabel, selectedValue) {
+        const options = ['<option value="">' + defaultLabel + '</option>'];
+
+        values.forEach(function (value) {
+          const optionValue = String(value);
+          const selected = optionValue === String(selectedValue) ? ' selected' : '';
+          options.push('<option value="' + escapeHtml(optionValue) + '"' + selected + '>' + escapeHtml(optionValue) + '</option>');
+        });
+
+        selectElement.innerHTML = options.join('');
+
+        if (selectedValue && Array.from(selectElement.options).some(function (option) {
+          return option.value === String(selectedValue);
+        })) {
+          selectElement.value = String(selectedValue);
+        } else {
+          selectElement.value = '';
+        }
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      google.script.run.withSuccessHandler(function (url) {
+        document.getElementById('gamesLink').href = url + '?page=games';
+      }).getAppUrl();
+
+      google.script.run.withSuccessHandler(function (response) {
+        renderTable(response);
+      }).getLeagueTableData({ year: '', season: '', week: '' });
+    </script>
+  </body>
+</html>
