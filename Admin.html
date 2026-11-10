@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin - Add Game</title>
+    <style>
+      :root {
+        --bg: #f3f6fb; --panel: #ffffff; --panel-alt: #f8fafc; --text: #14213d;
+        --muted: #55627a; --line: #dfe7f1; --primary: #1d4ed8; --primary-dark: #1e3a8a;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Arial, sans-serif; background: linear-gradient(180deg, #edf3ff 0%, var(--bg) 100%); color: var(--text); }
+      .panel { max-width: 980px; margin: 18px auto; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 12px 28px rgba(20, 33, 61, 0.08); padding: 18px; }
+      h1 { margin: 0 0 12px; font-size: 32px; color: var(--primary-dark); }
+      h2 { margin: 0 0 8px; font-size: 16px; color: var(--primary-dark); }
+      .nav { margin-bottom: 16px; font-size: 14px; }
+      .nav a { color: var(--primary-dark); font-weight: 700; margin-right: 14px; }
+      .row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; padding: 12px; background: var(--panel-alt); border: 1px solid var(--line); border-radius: 12px; }
+      .field { display: flex; flex-direction: column; min-width: 140px; flex: 1 1 140px; }
+      .field label { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; }
+      input { padding: 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; width: 100%; }
+      .teams { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+      .team { flex: 1 1 300px; border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+      .player { display: flex; gap: 8px; margin-bottom: 8px; }
+      .player .name { flex: 1; }
+      .player .goals { width: 80px; }
+      button { padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-size: 14px; }
+      button.primary { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 700; }
+      button:disabled { opacity: 0.6; cursor: default; }
+      .hint { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+      #message { margin-top: 12px; font-weight: 700; }
+      #message.ok { color: #166534; }
+      #message.err { color: #b91c1c; }
+      @media (max-width: 700px) { .panel { margin: 8px; padding: 12px; } h1 { font-size: 24px; } .field { min-width: 100%; } }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h1>Add Game</h1>
+      <div class="nav"><a id="leagueLink" href="?" target="_top">League table</a><a id="gamesLink" href="#" target="_top">Game results</a></div>
+
+      <div class="row">
+        <div class="field"><label for="year">Year</label><input id="year" list="yearList" inputmode="numeric" /></div>
+        <div class="field"><label for="season">Season</label><input id="season" list="seasonList" /></div>
+        <div class="field"><label for="week">Week (date)</label><input id="week" type="date" /></div>
+      </div>
+      <datalist id="yearList"></datalist>
+      <datalist id="seasonList"></datalist>
+      <datalist id="playerList"></datalist>
+
+      <div class="teams">
+        <div class="team"><h2>Bibs</h2><div id="bibsPlayers"></div><button type="button" id="addBibs">+ Add player</button></div>
+        <div class="team"><h2>Non-Bibs</h2><div id="nonBibsPlayers"></div><button type="button" id="addNonBibs">+ Add player</button></div>
+      </div>
+
+      <h2>Game score (only needed if you don't know the scorers)</h2>
+      <p class="hint">Leave blank to use the total of player goals. A typed score replaces the goal total for that side.</p>
+      <div class="row">
+        <div class="field"><label for="bibsScore">Bibs score</label><input id="bibsScore" type="number" min="0" /></div>
+        <div class="field"><label for="nonBibsScore">Non-Bibs score</label><input id="nonBibsScore" type="number" min="0" /></div>
+        <div class="field"><label for="code">Edit code</label><input id="code" type="password" autocomplete="off" /></div>
+      </div>
+
+      <button type="button" class="primary" id="save">Save game</button>
+      <div id="message"></div>
+    </div>
+
+    <script>
+      const PLAYER_ROWS = 7;
+
+      function addPlayerRow(containerId, name, goals) {
+        const div = document.createElement('div');
+        div.className = 'player';
+        div.innerHTML = '<input class="name" list="playerList" placeholder="Player name" />' +
+          '<input class="goals" type="number" min="0" step="1" placeholder="Goals" />';
+        div.querySelector('.name').value = name || '';
+        div.querySelector('.goals').value = goals || '';
+        document.getElementById(containerId).appendChild(div);
+      }
+
+      function readPlayers(containerId) {
+        return Array.prototype.map.call(document.querySelectorAll('#' + containerId + ' .player'), function (div) {
+          return { name: div.querySelector('.name').value, goals: div.querySelector('.goals').value };
+        });
+      }
+
+      function resetPlayers() {
+        ['bibsPlayers', 'nonBibsPlayers'].forEach(function (id) {
+          document.getElementById(id).innerHTML = '';
+          for (let i = 0; i < PLAYER_ROWS; i++) addPlayerRow(id);
+        });
+      }
+
+      const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+      // Turns a date picker value (yyyy-mm-dd) into text like "6th September".
+      function formatWeek(isoDate) {
+        const parts = String(isoDate || '').split('-');
+        if (parts.length !== 3) return '';
+        const day = Number(parts[2]);
+        const mod100 = day % 100;
+        const suffix = mod100 >= 11 && mod100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[day % 10] || 'th');
+        return day + suffix + ' ' + MONTH_NAMES[Number(parts[1]) - 1];
+      }
+
+      document.getElementById('week').addEventListener('change', function () {
+        const year = this.value.split('-')[0];
+        if (year) document.getElementById('year').value = year;
+      });
+
+      function fillList(id, values) {
+        document.getElementById(id).innerHTML = values.map(function (v) {
+          return '<option value="' + String(v).replace(/"/g, '&quot;') + '"></option>';
+        }).join('');
+      }
+
+      function showMessage(text, ok) {
+        const el = document.getElementById('message');
+        el.textContent = text;
+        el.className = ok ? 'ok' : 'err';
+      }
+
+      document.getElementById('addBibs').onclick = function () { addPlayerRow('bibsPlayers'); };
+      document.getElementById('addNonBibs').onclick = function () { addPlayerRow('nonBibsPlayers'); };
+
+      document.getElementById('save').onclick = function () {
+        const button = this;
+        const game = {
+          year: document.getElementById('year').value,
+          season: document.getElementById('season').value,
+          week: formatWeek(document.getElementById('week').value),
+          bibs: readPlayers('bibsPlayers'),
+          nonBibs: readPlayers('nonBibsPlayers'),
+          bibsScore: document.getElementById('bibsScore').value,
+          nonBibsScore: document.getElementById('nonBibsScore').value
+        };
+        button.disabled = true;
+        showMessage('Saving...', true);
+        google.script.run
+          .withSuccessHandler(function (result) {
+            button.disabled = false;
+            showMessage('Saved ' + result.added + ' rows to the sheet.', true);
+            document.getElementById('week').value = '';
+            document.getElementById('bibsScore').value = '';
+            document.getElementById('nonBibsScore').value = '';
+            resetPlayers();
+            loadOptions();
+          })
+          .withFailureHandler(function (error) {
+            button.disabled = false;
+            showMessage(String(error && error.message ? error.message : error).replace(/^Error:\s*/, ''), false);
+          })
+          .addGame(document.getElementById('code').value, game);
+      };
+
+      function loadOptions() {
+        google.script.run.withSuccessHandler(function (options) {
+          fillList('yearList', options.years);
+          fillList('seasonList', options.seasons);
+          fillList('playerList', options.players);
+        }).getAdminOptions();
+      }
+
+      google.script.run.withSuccessHandler(function (url) {
+        document.getElementById('leagueLink').href = url;
+        document.getElementById('gamesLink').href = url + '?page=games';
+      }).getAppUrl();
+
+      resetPlayers();
+      loadOptions();
+    </script>
+  </body>
+</html>

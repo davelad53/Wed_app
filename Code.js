@@ -1,7 +1,9 @@
 function doGet(e) {
-  const page = e && e.parameter && e.parameter.page === 'games' ? 'Games' : 'Index';
+  const requested = e && e.parameter && e.parameter.page;
+  const page = requested === 'games' ? 'Games' : (requested === 'admin' ? 'Admin' : 'Index');
+  const titles = { Games: 'Game Results', Admin: 'Admin - Add Game', Index: 'League Table' };
   return HtmlService.createHtmlOutputFromFile(page)
-    .setTitle(page === 'Games' ? 'Game Results' : 'League Table')
+    .setTitle(titles[page])
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
@@ -98,13 +100,16 @@ function getLeagueTableData(options) {
 
   const weekResults = {};
 
-  filteredRows.forEach(function (row) {
-    const weekValue = String(row[indexes.week] || '').trim();
+  const filteredSet = new Set(filteredRows);
+
+  allRows.forEach(function (row) {
+    const weekName = String(row[indexes.week] || '').trim();
+    const weekValue = [normalizeSelection(row[indexes.year]), normalizeSelection(row[indexes.season]), weekName].join('|');
     const teamGroup = normalizeTeam(row[indexes.teams]);
     const playerName = String(row[indexes.players] || '').trim();
     const goals = Number(row[indexes.goals]) || 0;
 
-    if (!weekValue || !playerName) {
+    if (!weekName || !playerName) {
       return;
     }
 
@@ -117,6 +122,7 @@ function getLeagueTableData(options) {
     }
 
     applyScoreOverride(weekResults[weekValue], row, indexes);
+    if (filteredSet.has(row)) weekResults[weekValue].inFilter = true;
 
     if (teamGroup === 'bibs') {
       weekResults[weekValue].bibsGoals += goals;
@@ -137,7 +143,20 @@ function getLeagueTableData(options) {
 
   const playerStats = {};
 
-  Object.keys(weekResults).forEach(function (weekValue) {
+  const gameKeys = Object.keys(weekResults).sort(function (a, b) {
+    const partsA = a.split('|');
+    const partsB = b.split('|');
+    if (partsA[0] !== partsB[0]) return partsA[0].localeCompare(partsB[0]);
+    return weekSortValue(partsA[2]) - weekSortValue(partsB[2]);
+  });
+  let lastFilteredIndex = -1;
+  gameKeys.forEach(function (key, index) {
+    if (weekResults[key].inFilter) lastFilteredIndex = index;
+  });
+  const formGames = lastFilteredIndex === -1 ? [] : gameKeys.slice(Math.max(0, lastFilteredIndex - 4), lastFilteredIndex + 1).reverse();
+  const formResults = {};
+
+  gameKeys.forEach(function (weekValue) {
     const currentWeek = weekResults[weekValue];
     const playerNames = Object.keys(currentWeek.players);
 
@@ -154,6 +173,10 @@ function getLeagueTableData(options) {
     playerNames.forEach(function (playerName) {
       const player = currentWeek.players[playerName];
       const side = player.side;
+
+      formResults[playerName + '|' + weekValue] = winner === 'draw' ? 'D' : (winner === side ? 'W' : 'L');
+
+      if (!currentWeek.inFilter) return;
 
       if (!playerStats[playerName]) {
         playerStats[playerName] = {
@@ -194,7 +217,11 @@ function getLeagueTableData(options) {
         draws: playerStats[playerName].draws,
         losses: playerStats[playerName].losses,
         points: playerStats[playerName].points,
-        goals: playerStats[playerName].goals
+        ppg: playerStats[playerName].played ? playerStats[playerName].points / playerStats[playerName].played : 0,
+        goals: playerStats[playerName].goals,
+        form: formGames.map(function (gameKey) {
+          return formResults[playerName + '|' + gameKey] || '-';
+        })
       };
     })
     .sort(function (a, b) {
@@ -373,4 +400,146 @@ function sortWeeks(weeks) {
   return weeks.slice().sort(function (a, b) {
     return weekSortValue(a) - weekSortValue(b) || a.localeCompare(b);
   });
+}
+
+// ---- Admin: add a week's game to the raw data sheet ----
+
+function getRawSheet() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Full Raw data');
+  if (!sheet) throw new Error("Sheet 'Full Raw data' not found.");
+  return sheet;
+}
+
+function getAdminOptions() {
+  const values = getRawSheet().getDataRange().getValues();
+  const headers = values[0].map(function (h) { return String(h || '').trim().toLowerCase(); });
+  const col = function (name) { return headers.indexOf(name); };
+  const unique = function (index) {
+    if (index === -1) return [];
+    return uniqueSorted(values.slice(1).map(function (r) { return r[index]; }));
+  };
+  return {
+    years: unique(col('year')),
+    seasons: unique(col('season')),
+    players: unique(col('players'))
+  };
+}
+
+// The edit code is kept in Project Settings > Script properties as ADMIN_CODE.
+function checkAdminCode(code) {
+  const expected = PropertiesService.getScriptProperties().getProperty('ADMIN_CODE');
+  if (!expected) throw new Error('No ADMIN_CODE script property has been set.');
+  if (String(code || '') !== expected) throw new Error('Incorrect edit code.');
+}
+
+function addGame(code, game) {
+  checkAdminCode(code);
+
+  const year = normalizeSelection(game && game.year);
+  const season = normalizeSelection(game && game.season);
+  const week = normalizeSelection(game && game.week);
+  if (!year || !season || !week) throw new Error('Year, season and week are required.');
+
+  const teams = [
+    { label: 'Bibs', number: 1, players: (game.bibs || []) },
+    { label: 'Non bibs', number: 2, players: (game.nonBibs || []) }
+  ];
+
+  const bibsScore = readScore(game.bibsScore);
+  const nonBibsScore = readScore(game.nonBibsScore);
+  [game.bibsScore, game.nonBibsScore].forEach(function (value) {
+    if (value !== '' && value !== null && value !== undefined && (readScore(value) === undefined || readScore(value) < 0)) {
+      throw new Error('Scores must be numbers of 0 or more.');
+    }
+  });
+
+  const newRows = [];
+  teams.forEach(function (team) {
+    team.players.forEach(function (p) {
+      const name = String(p && p.name || '').trim();
+      if (!name) return;
+      const goals = p.goals === '' || p.goals === null || p.goals === undefined ? 0 : Number(p.goals);
+      if (isNaN(goals) || goals < 0 || Math.floor(goals) !== goals) {
+        throw new Error('Goals for ' + name + ' must be a whole number of 0 or more.');
+      }
+      newRows.push({ team: team, name: name, goals: goals });
+    });
+  });
+  if (!newRows.length) throw new Error('Add at least one player.');
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sheet = getRawSheet();
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0].map(function (h) { return String(h || '').trim().toLowerCase(); });
+    const idx = {
+      year: headers.indexOf('year'),
+      season: headers.indexOf('season'),
+      week: headers.indexOf('week'),
+      teams: headers.indexOf('teams'),
+      team: headers.indexOf('team'),
+      players: headers.indexOf('players'),
+      goals: headers.indexOf('goals'),
+      bibsScore: findScoreColumn(headers, 'bibsscore'),
+      nonBibsScore: findScoreColumn(headers, 'nonbibsscore')
+    };
+    ['year', 'season', 'week', 'teams', 'team', 'players', 'goals'].forEach(function (key) {
+      if (idx[key] === -1) throw new Error('Missing column: ' + key);
+    });
+
+    const exists = values.slice(1).some(function (r) {
+      return normalizeSelection(r[idx.year]) === year &&
+        normalizeSelection(r[idx.season]) === season &&
+        normalizeSelection(r[idx.week]).toLowerCase() === week.toLowerCase();
+    });
+    if (exists) throw new Error('A game for ' + year + ' / ' + season + ' / ' + week + ' already exists.');
+
+    const output = newRows.map(function (item, i) {
+      const row = new Array(headers.length).fill('');
+      row[idx.year] = isNaN(Number(year)) ? year : Number(year);
+      row[idx.season] = season;
+      row[idx.week] = week;
+      row[idx.teams] = item.team.label;
+      row[idx.team] = item.team.number;
+      row[idx.players] = item.name;
+      row[idx.goals] = item.goals;
+      if (i === 0) {
+        if (idx.bibsScore !== -1 && bibsScore !== undefined) row[idx.bibsScore] = bibsScore;
+        if (idx.nonBibsScore !== -1 && nonBibsScore !== undefined) row[idx.nonBibsScore] = nonBibsScore;
+      }
+      return row;
+    });
+
+    if ((bibsScore !== undefined && idx.bibsScore === -1) || (nonBibsScore !== undefined && idx.nonBibsScore === -1)) {
+      throw new Error("Add 'Bibs Score' and 'Non-Bibs Score' headers to the sheet first.");
+    }
+
+    const startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, idx.week + 1, output.length, 1).setNumberFormat('@');
+    sheet.getRange(startRow, 1, output.length, headers.length).setValues(output);
+    return { added: output.length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Year and season of the most recent game in the sheet.
+function getLatestSeason() {
+  const values = getRawSheet().getDataRange().getValues();
+  const headers = values[0].map(function (h) { return String(h || '').trim().toLowerCase(); });
+  const yearIdx = headers.indexOf('year');
+  const seasonIdx = headers.indexOf('season');
+  const weekIdx = headers.indexOf('week');
+  let best = null;
+
+  values.slice(1).forEach(function (row) {
+    const year = normalizeSelection(row[yearIdx]);
+    const season = normalizeSelection(row[seasonIdx]);
+    if (!year || !season) return;
+    const score = Number(year) * 10000 + weekSortValue(row[weekIdx]);
+    if (!best || score > best.score) best = { year: year, season: season, score: score };
+  });
+
+  return best ? { year: best.year, season: best.season } : { year: '', season: '' };
 }

@@ -45,8 +45,11 @@
       .game { border: 1px solid var(--line); border-radius: 14px; margin-bottom: 14px; overflow: hidden; }
       .game-head { background: var(--panel-alt); padding: 8px 14px; font-size: 13px; font-weight: 700; color: var(--muted); }
       .score { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 14px; font-size: 20px; font-weight: 700; }
+      .bib-icon { vertical-align: middle; margin-right: 6px; }
+      .team h3 .bib-icon { width: 18px; height: 18px; margin-top: -3px; }
       .score .num { font-size: 34px; color: var(--primary-dark); }
       .score .win { color: #166534; }
+      .unknown { text-align: center; font-size: 12px; font-style: italic; color: #92400e; background: #fef3c7; padding: 4px; }
       .teams { display: flex; border-top: 1px solid var(--line); }
       .team { flex: 1; padding: 10px 14px; font-size: 14px; }
       .team + .team { border-left: 1px solid var(--line); }
@@ -69,7 +72,7 @@
   <body>
     <div class="panel">
       <h1>Game Results</h1>
-      <div class="nav"><a id="leagueLink" href="?" target="_top">&larr; League table</a></div>
+      <div class="nav"><a id="leagueLink" href="?" target="_top">&larr; League table</a> &nbsp;&middot;&nbsp; <a id="adminLink" href="#" target="_top">&#128274; Admin</a></div>
 
       <div class="filters">
         <div class="field">
@@ -123,11 +126,26 @@
           }).join('');
       }
 
+      const BIB_ICON = '<svg class="bib-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">' +
+        '<path d="M8 2 L2 5.5 L4.5 10 L7 8.8 V21 H17 V8.8 L19.5 10 L22 5.5 L16 2 C15.5 3.8 13.9 4.8 12 4.8 C10.1 4.8 8.5 3.8 8 2 Z" fill="#ffffff" stroke="#14213d" stroke-width="1.2" stroke-linejoin="round"/>' +
+        '<path d="M8.4 4 C9.2 5.4 10.5 6.2 12 6.2 C13.5 6.2 14.8 5.4 15.6 4 L17 8.8 V21 H7 V8.8 Z" fill="#e4ff00" stroke="#14213d" stroke-width="1" stroke-linejoin="round"/>' +
+        '</svg>';
+
+      const SHIRT_PATH = 'M8 2 L2 5.5 L4.5 10 L7 8.8 V21 H17 V8.8 L19.5 10 L22 5.5 L16 2 C15.5 3.8 13.9 4.8 12 4.8 C10.1 4.8 8.5 3.8 8 2 Z';
+      const NON_BIB_ICON = '<svg class="bib-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">' +
+        '<defs><linearGradient id="multiShirt" x1="0" y1="0" x2="1" y2="0">' +
+        '<stop offset="0" stop-color="#dc2626"/><stop offset="0.25" stop-color="#dc2626"/>' +
+        '<stop offset="0.25" stop-color="#2563eb"/><stop offset="0.5" stop-color="#2563eb"/>' +
+        '<stop offset="0.5" stop-color="#16a34a"/><stop offset="0.75" stop-color="#16a34a"/>' +
+        '<stop offset="0.75" stop-color="#f59e0b"/><stop offset="1" stop-color="#f59e0b"/>' +
+        '</linearGradient></defs>' +
+        '<path d="' + SHIRT_PATH + '" fill="url(#multiShirt)" stroke="#14213d" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+
       function teamHtml(title, players) {
         const items = players.map(function (p) {
-          return '<li' + (p.goals > 0 ? ' class="scorer"' : '') + '><span>' + esc(p.player) + '</span><span class="goals">' + (p.goals ? p.goals + ' &#9917;' : '') + '</span></li>';
+          return '<li' + (p.goals > 0 ? ' class="scorer"' : '') + '><span>' + esc(p.player) + '</span><span class="goals">' + (p.goals > 0 ? '<span title="' + p.goals + ' goal' + (p.goals === 1 ? '' : 's') + '">' + '&#9917;'.repeat(p.goals) + '</span>' : '') + '</span></li>';
         }).join('');
-        return '<div class="team"><h3>' + title + '</h3><ul>' + (items || '<li class="goals">No players recorded</li>') + '</ul></div>';
+        return '<div class="team"><h3>' + (title === 'Bibs' ? BIB_ICON : NON_BIB_ICON) + title + '</h3><ul>' + (items || '<li class="goals">No players recorded</li>') + '</ul></div>';
       }
 
       function render(response) {
@@ -147,9 +165,10 @@
           const nonWin = g.nonBibsScore > g.bibsScore;
           return '<div class="game">' +
             '<div class="game-head">' + esc(g.year) + ' &middot; ' + esc(g.season) + ' &middot; ' + esc(g.week) + '</div>' +
-            '<div class="score"><span>Bibs</span>' +
+            '<div class="score"><span class="side">' + BIB_ICON + 'Bibs</span>' +
             '<span class="num' + (bibsWin ? ' win' : '') + '">' + g.bibsScore + '</span><span>-</span>' +
-            '<span class="num' + (nonWin ? ' win' : '') + '">' + g.nonBibsScore + '</span><span>Non-Bibs</span></div>' +
+            '<span class="num' + (nonWin ? ' win' : '') + '">' + g.nonBibsScore + '</span><span class="side">' + NON_BIB_ICON + 'Non-Bibs</span></div>' +
+            (g.estimated ? '<div class="unknown">Match Score Recorded - partial or missing scorers</div>' : '') +
             '<div class="teams">' + teamHtml('Bibs', g.bibs) + teamHtml('Non-Bibs', g.nonBibs) + '</div>' +
             '</div>';
         }).join('');
@@ -163,6 +182,7 @@
 
       google.script.run.withSuccessHandler(function (url) {
         document.getElementById('leagueLink').href = url;
+        document.getElementById('adminLink').href = url + '?page=admin';
       }).getAppUrl();
 
       loadGames();

@@ -173,6 +173,16 @@
         }
       }
 
+      .form { display: inline-flex; gap: 3px; }
+      .sq { width: 14px; height: 14px; border-radius: 3px; background: #cbd5e1; }
+      .sq-W { background: #16a34a; }
+      .sq-L { background: #dc2626; }
+      .sq-D { background: #f59e0b; }
+
+      .form-key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+      .form-key span { display: inline-flex; align-items: center; gap: 5px; }
+      .key-note { font-style: italic; }
+
       .empty {
         padding: 22px;
         text-align: center;
@@ -212,6 +222,16 @@
 
       <div class="summary" id="summaryText">Loading table...</div>
 
+      <div class="form-key">
+        <strong>Form:</strong>
+        <span><span class="sq sq-W"></span> Win</span>
+        <span><span class="sq sq-D"></span> Draw</span>
+        <span><span class="sq sq-L"></span> Loss</span>
+        <span><span class="sq sq-n"></span> Did not play</span>
+        <span class="key-note">Latest game first</span>
+        <span><strong>PPG:</strong> points per game</span>
+      </div>
+
       <table>
         <thead>
           <tr>
@@ -221,8 +241,10 @@
             <th data-sort="wins" class="sortable">W</th>
             <th data-sort="draws" class="sortable">D</th>
             <th data-sort="losses" class="sortable">L</th>
-            <th data-sort="points" class="sortable">Points</th>
+            <th data-sort="points" class="sortable">Pts</th>
+            <th data-sort="ppg" class="sortable">PPG</th>
             <th data-sort="goals" class="sortable">Goals</th>
+            <th>Form</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -262,7 +284,7 @@
         populateFilters(response.filters, response.selected);
 
         if (!response.rows || !response.rows.length) {
-          tableBody.innerHTML = '<tr><td colspan="8" class="empty">No results found for the selected filters.</td></tr>';
+          tableBody.innerHTML = '<tr><td colspan="10" class="empty">No results found for the selected filters.</td></tr>';
           summaryText.textContent = 'No matches found.';
           return;
         }
@@ -279,7 +301,9 @@
             '<td>' + row.draws + '</td>' +
             '<td>' + row.losses + '</td>' +
             '<td>' + row.points + '</td>' +
+            '<td>' + Number(row.ppg).toFixed(2) + '</td>' +
             '<td>' + row.goals + '</td>' +
+            '<td>' + formHtml(row.form) + '</td>' +
             '</tr>';
         }).join('');
 
@@ -297,6 +321,15 @@
             renderTable(response);
           };
         });
+      }
+
+      function formHtml(form) {
+        const labels = { W: 'Won', L: 'Lost', D: 'Drew', '-': 'Did not play' };
+        const squares = (form || []).slice();
+        while (squares.length < 5) squares.push('-');
+        return '<span class="form">' + squares.map(function (result) {
+          return '<span class="sq sq-' + (result === '-' ? 'n' : result) + '" title="' + labels[result] + '"></span>';
+        }).join('') + '</span>';
       }
 
       function sortRows(rows, key, direction) {
@@ -373,9 +406,16 @@
         document.getElementById('gamesLink').href = url + '?page=games';
       }).getAppUrl();
 
-      google.script.run.withSuccessHandler(function (response) {
-        renderTable(response);
-      }).getLeagueTableData({ year: '', season: '', week: '' });
+      function loadInitialTable(latest) {
+        google.script.run.withSuccessHandler(function (response) {
+          renderTable(response);
+        }).getLeagueTableData({ year: latest.year, season: latest.season, week: '' });
+      }
+
+      google.script.run
+        .withSuccessHandler(loadInitialTable)
+        .withFailureHandler(function () { loadInitialTable({ year: '', season: '' }); })
+        .getLatestSeason();
     </script>
   </body>
 </html>
